@@ -1,73 +1,63 @@
-# data_genix
+# DataGenix
 
-A robust and simple library for generating synthetic datasets for machine learning and deep learning projects. Avoid the hassle of downloading and managing data files for testing and prototyping.
+An advanced and robust library for generating synthetic datasets for machine learning and deep learning projects. Go from idea to prototype in seconds without data acquisition bottlenecks.
 
 ## Installation
 
-Clone the repository and install using pip:
-
+Install from PyPI (once published):
 ```bash
-git clone [https://github.com/yourusername/data_genix.git](https://github.com/yourusername/data_genix.git)
-cd data_genix
+pip install datagenix
+```
+
+Or install directly from the repository:
+```bash
+git clone [https://github.com/yourusername/datagenix.git](https://github.com/yourusername/datagenix.git)
+cd datagenix
 pip install .
 ```
 
-## Quick Start
+## Ultimate Usage Example
 
-Generate a DataFrame with a variety of data types with a single function call.
+Generate a complex, realistic dataset for a binary classification task with a single, intuitive command:
 
 ```python
-from data_genix import DataGenerator
+from datagenix import DataGenerator
 
-# Initialize the generator
-generator = DataGenerator()
+generator = DataGenerator(seed=42)
 
-# Generate a dataset with 1000 rows
 df = generator.generate(
     num_rows=1000,
     numerical_whole=3,
     decimal=2,
     categorical=2,
-    ordinal=1,
     boolean=1,
-    datetime=1,
     text=1,
     uuid=1,
-    object_types=['name', 'country', 'email', 'job']
+    object_types=['name', 'email'],
+    target_type='binary',
+    missing_numerical=0.05,
+    missing_categorical=0.1,
+    correlation_strength=0.7,
+    group_by='customer_id',
+    num_groups=50,
+    time_series=True,
+    numerical_whole_range=(100, 999),
+    add_outliers=True,
+    outlier_fraction=0.02,
+    text_style='review'
 )
 
 print(df.head())
 print(df.info())
 ```
 
-## Features
+## Advanced Features
 
-- **Numerical Data**: Generate columns of whole numbers (integers) or decimals (floats).
-- **Categorical Data**: Generate columns with a predefined set of unordered categories.
-- **Ordinal Data**: Generate columns with a predefined set of *ordered* categories.
-- **Boolean Data**: Generate columns of `True`/`False` values.
-- **Datetime Data**: Generate columns with `datetime` objects.
-- **Text Data**: Generate columns with random sentences.
-- **ID Data**: Generate columns with unique identifiers (UUIDs).
-- **Coordinates**: Generate paired latitude and longitude columns.
-- **Web Data**: Generate columns for IP addresses, URLs, and phone numbers.
-- **Nested Data**: Generate columns containing JSON-formatted strings.
-- **Object/Text Data**: Leverage the power of the `Faker` library to generate realistic text data like names, addresses, emails, and much more.
-
-### Supported `object_types`
-
-You can use any standard `Faker` provider method name as a string in the `object_types` list. Common examples include:
-
-- `name`
-- `email`
-- `address`
-- `country`
-- `city`
-- `job`
-- `text`
-- `datetime`
-- `phone_number`
-- `company`
-- `url`
-- `credit_card_number`
-
+- **Target Generation**: Automatically create a `target` column for `binary`, `multi-class`, or `regression` tasks that is logically correlated with the features.
+- **Missing Data**: Inject missing values (`NaN`) into any feature type with precise fractional control (e.g., `missing_numerical=0.1`).
+- **Feature Correlation**: Create linear dependencies between numerical features with adjustable `correlation_strength`.
+- **Grouped Data**: Simulate real-world scenarios like customer data by grouping rows with a common ID using `group_by` and `num_groups`.
+- **Time Series**: Generate a chronologically sorted `timestamp` column for time-dependent modeling.
+- **Outlier Injection**: Introduce extreme values into numerical columns to test model robustness using `add_outliers` and `outlier_fraction`.
+- **Custom Ranges**: Define exact `(min, max)` ranges for numerical columns.
+- **Text Styles**: Generate varied text content like `review`, `tweet`, or standard `sentence`.
