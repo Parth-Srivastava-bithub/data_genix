@@ -1,4 +1,4 @@
-# DataGenix
+# data_genix
 
 A robust and simple library for generating synthetic datasets for machine learning and deep learning projects. Avoid the hassle of downloading and managing data files for testing and prototyping.
 
@@ -7,8 +7,8 @@ A robust and simple library for generating synthetic datasets for machine learni
 Clone the repository and install using pip:
 
 ```bash
-git clone [https://github.com/yourusername/datagenix.git](https://github.com/yourusername/datagenix.git)
-cd datagenix
+git clone [https://github.com/yourusername/data_genix.git](https://github.com/yourusername/data_genix.git)
+cd data_genix
 pip install .
 ```
 
@@ -17,7 +17,7 @@ pip install .
 Generate a DataFrame with a variety of data types with a single function call.
 
 ```python
-from datagenix import DataGenerator
+from data_genix import DataGenerator
 
 # Initialize the generator
 generator = DataGenerator()
