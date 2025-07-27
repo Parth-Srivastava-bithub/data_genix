@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+data_genix/__init__.py
+data_genix/generator.py
+datagenix.egg-info/PKG-INFO
+datagenix.egg-info/SOURCES.txt
+datagenix.egg-info/dependency_links.txt
+datagenix.egg-info/requires.txt
+datagenix.egg-info/top_level.txt
