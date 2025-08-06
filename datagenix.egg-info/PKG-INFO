@@ -2,9 +2,9 @@ Metadata-Version: 2.4
 Name: datagenix
 Version: 0.1.2
 Summary: A robust and simple library for generating synthetic datasets for ML/DL projects.
-Author-email: Your Name <your.email@example.com>
+Author-email: Foresty <dsparthsrivastava@gmai.com>
 License: MIT
-Project-URL: Homepage, https://github.com/yourusername/datagenix
+Project-URL: Homepage, https://github.com/Parth-Srivastava-bithub/data_genix
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: Intended Audience :: Science/Research

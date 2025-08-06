@@ -2,13 +2,19 @@ import pandas as pd
 import numpy as np
 from faker import Faker
 from typing import List, Optional, Dict, Any, Callable, Tuple
-import json
 import datetime as dt
 from sklearn.preprocessing import minmax_scale
+import warnings
+
+# Suppress SettingWithCopyWarning as we handle it correctly
+from pandas.errors import SettingWithCopyWarning
+warnings.filterwarnings('ignore', category=SettingWithCopyWarning)
+
 
 class DataGenerator:
     """
     An advanced class to generate realistic synthetic datasets for machine learning.
+    Refactored for stability, reliability, and clarity.
     """
 
     def __init__(self, seed: Optional[int] = None):
@@ -18,221 +24,211 @@ class DataGenerator:
             Faker.seed(seed)
 
     def _get_faker_method(self, provider_name: str) -> Callable[[], Any]:
+        """Fetches a provider method from the Faker instance."""
         try:
             return getattr(self._faker, provider_name)
         except AttributeError:
             raise AttributeError(f"'{provider_name}' is not a valid Faker provider.")
 
-    def _add_missing_values(self, series: pd.Series, fraction: float) -> pd.Series:
+    def _add_missing_values(self, df: pd.DataFrame, col_name: str, fraction: float):
+        """Injects missing values (NaN) into a specified column in place."""
         if fraction > 0:
-            n_missing = int(len(series) * fraction)
-            missing_indices = np.random.choice(series.index, n_missing, replace=False)
-            series.loc[missing_indices] = np.nan
-        return series
+            n_missing = int(len(df) * fraction)
+            if n_missing > 0:
+                missing_indices = np.random.choice(df.index, n_missing, replace=False)
+                df.loc[missing_indices, col_name] = np.nan
 
-    def _inject_outliers(self, series: pd.Series, fraction: float) -> pd.Series:
-        if fraction > 0 and pd.api.types.is_numeric_dtype(series):
-            n_outliers = int(len(series) * fraction)
-            outlier_indices = np.random.choice(series.index, n_outliers, replace=False)
-            
-            # Generate extreme outliers
-            q1, q3 = series.quantile(0.25), series.quantile(0.75)
-            iqr = q3 - q1
-            lower_bound = q1 - 3 * iqr
-            upper_bound = q3 + 3 * iqr
-            
-            for idx in outlier_indices:
-                if np.random.rand() > 0.5:
-                    series.loc[idx] = upper_bound * (1 + np.random.uniform(0.5, 2.0))
-                else:
-                    series.loc[idx] = lower_bound * (1 - np.random.uniform(0.5, 2.0))
-        return series
+    def _inject_outliers(self, df: pd.DataFrame, col_name: str, fraction: float):
+        """Injects extreme outliers into a numeric column in place."""
+        series = df[col_name]
+        # Guard clause: Only run on numeric columns that are not boolean
+        if fraction <= 0 or not pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
+            return
 
-    def generate(
-        self,
-        num_rows: int,
-        # Basic feature types
-        numerical_whole: int = 0,
-        decimal: int = 0,
-        categorical: int = 0,
-        ordinal: int = 0,
-        boolean: int = 0,
-        datetime: int = 0,
-        text: int = 0,
-        uuid: int = 0,
-        coordinates: int = 0,
-        object_types: Optional[List[str]] = None,
-        # Advanced features
-        target_type: Optional[str] = None,
-        correlation_strength: Optional[float] = None,
-        group_by: Optional[str] = None,
-        num_groups: int = 10,
-        time_series: bool = False,
-        add_outliers: bool = False,
-        outlier_fraction: float = 0.01,
-        # Missing data control
-        missing_numerical: float = 0.0,
-        missing_categorical: float = 0.0,
-        missing_boolean: float = 0.0,
-        missing_datetime: float = 0.0,
-        missing_text: float = 0.0,
-        # Customization
-        numerical_whole_range: Optional[Tuple[int, int]] = None,
-        decimal_range: Optional[Tuple[float, float]] = None,
-        text_style: str = 'sentence',
-        custom_configs: Optional[Dict[str, Dict[str, Any]]] = None
-    ) -> pd.DataFrame:
+        n_outliers = int(len(series) * fraction)
+        if n_outliers == 0:
+            return
+
+        outlier_indices = np.random.choice(series.dropna().index, n_outliers, replace=False)
+
+        q1, q3 = series.quantile(0.25), series.quantile(0.75)
+        iqr = q3 - q1
+
+        # Handle cases with zero IQR to prevent division by zero or non-sensical bounds
+        if iqr == 0:
+            iqr = series.std() if series.std() != 0 else 1
+
+        lower_bound = q1 - 3 * iqr
+        upper_bound = q3 + 3 * iqr
+
+        is_integer_col = pd.api.types.is_integer_dtype(series)
+
+        for idx in outlier_indices:
+            if np.random.rand() > 0.5:
+                outlier_value = upper_bound * (1 + np.random.uniform(0.5, 2.0))
+            else:
+                outlier_value = lower_bound * (1 - np.random.uniform(0.5, 2.0))
+
+            # Cast outlier to the original column type to avoid FutureWarning
+            df.loc[idx, col_name] = int(outlier_value) if is_integer_col else outlier_value
+
+    def _generate_features(self, df: pd.DataFrame, num_rows: int, configs: dict):
+        """Generates all primary features and adds them to the DataFrame."""
+        # Numerical Whole
+        low_w, high_w = configs.get("numerical_whole_range", (0, 1000))
+        for i in range(configs.get("numerical_whole", 0)):
+            df[f"numerical_whole_{i}"] = np.random.randint(low_w, high_w, size=num_rows)
+
+        # Decimal
+        low_d, high_d = configs.get("decimal_range", (0.0, 100.0))
+        for i in range(configs.get("decimal", 0)):
+            raw_data = np.random.uniform(low_d, high_d, size=num_rows)
+            df[f"decimal_{i}"] = np.round(raw_data, configs.get("custom_configs", {}).get("decimal", {}).get("decimals", 4))
+
+        # Categorical
+        cats = configs.get("custom_configs", {}).get("categorical", {}).get("categories", ['Alpha', 'Beta', 'Gamma', 'Delta'])
+        for i in range(configs.get("categorical", 0)):
+            df[f"categorical_{i}"] = np.random.choice(cats, size=num_rows)
+
+        # Boolean
+        for i in range(configs.get("boolean", 0)):
+            df[f"boolean_{i}"] = np.random.choice([True, False], size=num_rows)
+
+        # Datetime
+        start_date_config = configs.get("custom_configs", {}).get("datetime", {}).get("start_date", "-30y")
+        for i in range(configs.get("datetime", 0)):
+            df[f"datetime_{i}"] = [self._faker.date_time_between(start_date=start_date_config) for _ in range(num_rows)]
+
+        # Text
+        text_style = configs.get("text_style", "sentence")
+        for i in range(configs.get("text", 0)):
+            if text_style == 'review':
+                df[f"text_{i}"] = [self._faker.paragraph(nb_sentences=3) for _ in range(num_rows)]
+            elif text_style == 'tweet':
+                df[f"text_{i}"] = [f"{self._faker.sentence(nb_words=8)} #{self._faker.word()}" for _ in range(num_rows)]
+            else:
+                df[f"text_{i}"] = [self._faker.sentence() for _ in range(num_rows)]
+
+        # Other types
+        for i in range(configs.get("uuid", 0)): df[f"uuid_{i}"] = [self._faker.uuid4() for _ in range(num_rows)]
+        for i in range(configs.get("coordinates", 0)):
+            df[f"latitude_{i}"] = [self._faker.latitude() for _ in range(num_rows)]
+            df[f"longitude_{i}"] = [self._faker.longitude() for _ in range(num_rows)]
+
+        if configs.get("object_types"):
+            for obj_type in configs["object_types"]:
+                df[obj_type] = [self._get_faker_method(obj_type)() for _ in range(num_rows)]
+
+    def _apply_correlation(self, df: pd.DataFrame, strength: Optional[float]):
+        """Applies correlation to numerical columns if specified."""
+        if strength is None or strength < 0 or strength > 1:
+            return
+
+        numerical_cols = df.select_dtypes(include=np.number).columns.tolist()
+        if len(numerical_cols) < 2:
+            return
+
+        base_col_name = numerical_cols[0]
+        base_col_scaled = minmax_scale(df[base_col_name])
+
+        for col_name in numerical_cols[1:]:
+            noise = minmax_scale(np.random.normal(size=len(df)))
+            correlated_data = strength * base_col_scaled + (1 - strength) * noise
+
+            original_min, original_max = df[col_name].min(), df[col_name].max()
+            df[col_name] = correlated_data * (original_max - original_min) + original_min
+
+            if pd.api.types.is_integer_dtype(df[col_name].dtype):
+                df[col_name] = df[col_name].astype(int)
+
+    def _apply_postprocessing(self, df: pd.DataFrame, configs: dict):
+        """Applies missing data and outlier injection."""
+        missing_map = {
+            "numerical": configs.get("missing_numerical", 0.0),
+            "decimal": configs.get("missing_numerical", 0.0),
+            "categorical": configs.get("missing_categorical", 0.0),
+            "boolean": configs.get("missing_boolean", 0.0),
+            "datetime": configs.get("missing_datetime", 0.0),
+            "text": configs.get("missing_text", 0.0),
+        }
+
+        for col in df.columns:
+            # Inject Outliers first, before some values become NaN
+            if configs.get("add_outliers", False):
+                self._inject_outliers(df, col, configs.get("outlier_fraction", 0.01))
+
+            # Inject Missing Values
+            col_type = next((k for k in missing_map if k in col), None)
+            if col_type:
+                self._add_missing_values(df, col, missing_map[col_type])
+
+    def _generate_target(self, df: pd.DataFrame, target_type: Optional[str]):
+        """Generates a target column based on numeric features."""
+        if not target_type:
+            return
+
+        numeric_features = df.select_dtypes(include=np.number).dropna()
+        if numeric_features.empty:
+            # Fallback if no numeric data is available for target generation
+            if target_type == 'binary': df['target'] = np.random.choice([0, 1], size=len(df))
+            elif target_type == 'multi': df['target'] = np.random.choice([0, 1, 2], size=len(df))
+            else: df['target'] = np.random.rand(len(df)) * 100
+            return
+
+        weights = np.random.uniform(-1, 1, size=numeric_features.shape[1])
+        latent_variable = np.dot(numeric_features, weights) + np.random.normal(0, 0.1, size=len(numeric_features))
+
+        target_series = pd.Series(index=df.index, dtype=float)
+
+        if target_type == 'regression':
+            target_series.loc[numeric_features.index] = latent_variable
+        elif target_type == 'binary':
+            # Clip values to prevent overflow with np.exp
+            clipped_latent_variable = np.clip(latent_variable, -20, 20) # Adjust clip range as needed
+            prob = 1 / (1 + np.exp(-clipped_latent_variable))
+            target_series.loc[numeric_features.index] = (prob > 0.5).astype(int)
+        elif target_type == 'multi':
+            # Use qcut on the series directly to get labels
+            target_series.loc[numeric_features.index] = pd.qcut(latent_variable, q=3, labels=[0, 1, 2], duplicates='drop')
+
+        # Fill any missing target values (from rows with NaN in numeric features)
+        df['target'] = target_series
+        if df['target'].isnull().any():
+            fill_value = df['target'].mode()[0] if not df['target'].mode().empty else 0
+            # Use .loc for assignment to avoid FutureWarning
+            df.loc[df['target'].isnull(), 'target'] = fill_value
+            if target_type in ['binary', 'multi']:
+                df['target'] = df['target'].astype(int)
+
+    def generate(self, num_rows: int, **kwargs) -> pd.DataFrame:
         """
         Generates a highly customizable Pandas DataFrame for ML tasks.
+
+        Args:
+            num_rows: The number of rows to generate.
+            **kwargs: A dictionary of configuration options.
+
+        Returns:
+            A pandas DataFrame with the generated synthetic data.
         """
         if not isinstance(num_rows, int) or num_rows <= 0:
             raise ValueError("`num_rows` must be a positive integer.")
 
-        data = {}
-        if custom_configs is None: custom_configs = {}
+        df = pd.DataFrame(index=range(num_rows))
 
-        # --- Time Series Mode ---
-        if time_series:
+        # --- Time Series and Grouping ---
+        if kwargs.get('time_series', False):
             start_date = dt.datetime.now() - dt.timedelta(days=num_rows)
-            data['timestamp'] = pd.to_datetime(pd.date_range(start=start_date, periods=num_rows, freq='D'))
-        
-        # --- Grouped Data Simulation ---
-        if group_by:
-            group_ids = [self._faker.uuid4() for _ in range(num_groups)]
-            data[group_by] = np.random.choice(group_ids, size=num_rows)
+            df['timestamp'] = pd.to_datetime(pd.date_range(start=start_date, periods=num_rows, freq='D'))
 
-        # --- Feature Generation ---
-        num_config = custom_configs.get("numerical_whole", {})
-        low_w, high_w = numerical_whole_range if numerical_whole_range else (num_config.get("low", 0), num_config.get("high", 1000))
-        for i in range(numerical_whole):
-            data[f"numerical_whole_{i}"] = np.random.randint(low_w, high_w, size=num_rows)
+        if kwargs.get('group_by'):
+            group_ids = [self._faker.uuid4() for _ in range(kwargs.get('num_groups', 10))]
+            df[kwargs['group_by']] = np.random.choice(group_ids, size=num_rows)
 
-        dec_config = custom_configs.get("decimal", {})
-        low_d, high_d = decimal_range if decimal_range else (dec_config.get("low", 0.0), dec_config.get("high", 100.0))
-        for i in range(decimal):
-            raw_data = np.random.uniform(low_d, high_d, size=num_rows)
-            data[f"decimal_{i}"] = np.round(raw_data, dec_config.get("decimals", 4))
-            
-        # --- Feature Correlation ---
-        numerical_cols = [col for col in data if "numerical" in col or "decimal" in col]
-        if correlation_strength and len(numerical_cols) > 1:
-            base_col_name = numerical_cols[0]
-            base_col_scaled = minmax_scale(data[base_col_name])
-            for col_name in numerical_cols[1:]:
-                noise = minmax_scale(np.random.normal(size=num_rows))
-                correlated_data = correlation_strength * base_col_scaled + (1 - correlation_strength) * noise
-                # Rescale to original column's range
-                original_min, original_max = data[col_name].min(), data[col_name].max()
-                data[col_name] = correlated_data * (original_max - original_min) + original_min
-                if "whole" in col_name: data[col_name] = data[col_name].astype(int)
-
-        # --- Other Feature Types ---
-        cat_config = custom_configs.get("categorical", {})
-        cats = cat_config.get("categories", ['Alpha', 'Beta', 'Gamma', 'Delta'])
-        for i in range(categorical): data[f"categorical_{i}"] = np.random.choice(cats, size=num_rows)
-        
-        for i in range(boolean): data[f"boolean_{i}"] = np.random.choice([True, False], size=num_rows)
-        
-        dt_config = custom_configs.get("datetime", {})
-        for i in range(datetime): data[f"datetime_{i}"] = [self._faker.date_time_between(start_date=dt_config.get("start_date", "-30y")) for _ in range(num_rows)]
-
-        for i in range(text):
-            if text_style == 'review':
-                data[f"text_{i}"] = [self._faker.paragraph(nb_sentences=3) for _ in range(num_rows)]
-            elif text_style == 'tweet':
-                data[f"text_{i}"] = [f"{self._faker.sentence(nb_words=8)} #{self._faker.word()}" for _ in range(num_rows)]
-            else: # sentence
-                data[f"text_{i}"] = [self._faker.sentence() for _ in range(num_rows)]
-
-        for i in range(uuid): data[f"uuid_{i}"] = [self._faker.uuid4() for _ in range(num_rows)]
-        for i in range(coordinates):
-            data[f"latitude_{i}"] = [self._faker.latitude() for _ in range(num_rows)]
-            data[f"longitude_{i}"] = [self._faker.longitude() for _ in range(num_rows)]
-
-        if object_types:
-            for obj_type in object_types:
-                data[obj_type] = [self._get_faker_method(obj_type)() for _ in range(num_rows)]
-        
-        df = pd.DataFrame(data)
-
-        # --- Post-processing: Outliers and Missing Data ---
-        for col in df.columns:
-            if add_outliers: df[col] = self._inject_outliers(df[col], outlier_fraction)
-            if "numerical" in col or "decimal" in col: df[col] = self._add_missing_values(df[col], missing_numerical)
-            if "categorical" in col: df[col] = self._add_missing_values(df[col], missing_categorical)
-            if "boolean" in col: df[col] = self._add_missing_values(df[col], missing_boolean)
-            if "datetime" in col: df[col] = self._add_missing_values(df[col], missing_datetime)
-            if "text" in col: df[col] = self._add_missing_values(df[col], missing_text)
-
-        # --- Target Column Generation ---
-        if target_type:
-            numeric_features = df.select_dtypes(include=np.number).dropna()
-            if not numeric_features.empty:
-                # Create a latent variable from a weighted sum of numeric features
-                weights = np.random.uniform(-1, 1, size=numeric_features.shape[1])
-                latent_variable = np.dot(numeric_features, weights) + np.random.normal(0, 0.1, size=len(numeric_features))
-                
-                if target_type == 'regression':
-                    df['target'] = latent_variable
-                elif target_type == 'binary':
-                    prob = 1 / (1 + np.exp(-latent_variable)) # Sigmoid
-                    df['target'] = (prob > 0.5).astype(int)
-                elif target_type == 'multi':
-                    prob = pd.qcut(latent_variable, q=3, labels=[0, 1, 2], duplicates='drop')
-                    df['target'] = prob
-                # Handle rows that had NaNs in numeric features
-                if df['target'].isnull().any():
-                    df['target'].fillna(df['target'].mode()[0], inplace=True)
+        # --- Generation Steps ---
+        self._generate_features(df, num_rows, kwargs)
+        self._apply_correlation(df, kwargs.get('correlation_strength'))
+        self._apply_postprocessing(df, kwargs)
+        self._generate_target(df, kwargs.get('target_type'))
 
         return df
-
-# ==============================================================================
-# Example Usage
-# ==============================================================================
-
-if __name__ == '__main__':
-    print("--- The Ultimate DataGenix Example ---")
-    generator = DataGenerator(seed=42)
-    
-    try:
-        df = generator.generate(
-            num_rows=1000,
-            numerical_whole=3,
-            decimal=2,
-            categorical=2,
-            boolean=1,
-            text=1,
-            uuid=1,
-            object_types=['name', 'email'],
-            target_type='binary',
-            missing_numerical=0.05,
-            missing_categorical=0.1,
-            correlation_strength=0.7,
-            group_by='customer_id',
-            num_groups=50,
-            time_series=True,
-            numerical_whole_range=(100, 999),
-            add_outliers=True,
-            outlier_fraction=0.02,
-            text_style='review'
-        )
-        
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', 200)
-
-        print(df.head())
-        print("\n--- DataFrame Info ---")
-        df.info()
-        
-        print("\n--- Data Quality Checks ---")
-        print(f"\nMissing values injected:\n{df.isnull().sum()[df.isnull().sum() > 0]}")
-        
-        numeric_cols_for_corr = [c for c in df.columns if 'numerical' in c or 'decimal' in c]
-        if len(numeric_cols_for_corr) > 1:
-            print(f"\nCorrelation matrix for numerical features:\n{df[numeric_cols_for_corr].corr()}")
-            
-        if 'target' in df.columns:
-            print(f"\nTarget distribution:\n{df['target'].value_counts(normalize=True)}")
-
-    except Exception as e:
-        print(f"\nAn error occurred during generation: {e}")

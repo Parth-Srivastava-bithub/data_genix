@@ -26,26 +26,26 @@ from datagenix import DataGenerator
 generator = DataGenerator(seed=42)
 
 df = generator.generate(
-    num_rows=1000,
-    numerical_whole=3,
-    decimal=2,
-    categorical=2,
-    boolean=1,
-    text=1,
-    uuid=1,
-    object_types=['name', 'email'],
-    target_type='binary',
-    missing_numerical=0.05,
-    missing_categorical=0.1,
-    correlation_strength=0.7,
-    group_by='customer_id',
-    num_groups=50,
-    time_series=True,
-    numerical_whole_range=(100, 999),
-    add_outliers=True,
-    outlier_fraction=0.02,
-    text_style='review'
-)
+            num_rows=1000,
+            numerical_whole=3,
+            decimal=2,
+            categorical=2,
+            boolean=1,
+            text=1,
+            uuid=1,
+            object_types=['name', 'email'],
+            target_type='binary',
+            missing_numerical=0.05,
+            missing_categorical=0.1,
+            correlation_strength=0.7,
+            group_by='customer_id',
+            num_groups=50,
+            time_series=True,
+            numerical_whole_range=(100, 999),
+            add_outliers=True,
+            outlier_fraction=0.02,
+            text_style='review'
+        )
 
 print(df.head())
 print(df.info())

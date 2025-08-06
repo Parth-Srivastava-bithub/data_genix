@@ -1,11 +1,11 @@
 [project]
 name = "datagenix"
-version = "0.1.2"
+version = "0.2.0"
 description = "A robust and simple library for generating synthetic datasets for ML/DL projects."
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [
-  { name = "Your Name", email = "dsparthsrivastava@gmai.com" }
+  { name = "Foresty", email = "dsparthsrivastava@gmai.com" }
 ]
 license = { text = "MIT" }
 classifiers = [
@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/datagenix"
+Homepage = "https://github.com/Parth-Srivastava-bithub/data_genix"
 
 [build-system]
 requires = ["setuptools>=61.0"]
